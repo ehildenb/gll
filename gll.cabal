@@ -47,7 +47,6 @@ library
                         , regex-applicative >= 0.3
     exposed-modules :     GLL.Combinators.Interface
                         , GLL.Combinators
-                        , GLL.Combinators.Test.Interface
                         , GLL.Combinators.Options
                         , GLL.Combinators.Memoisation
                         , GLL.Combinators.Lexer
@@ -56,13 +55,12 @@ library
                         , GLL.Types.Derivations
                         , GLL.Types.Grammar
                         , GLL.Flags
-
     other-modules   :     GLL.Combinators.Visit.Grammar
                         , GLL.Combinators.Visit.Sem
                         , GLL.Combinators.Visit.Join
-    ghc-options:         -fwarn-incomplete-patterns -fwarn-monomorphism-restriction -fwarn-unused-imports
-    default-language:    Haskell2010
-    default-extensions:  TypeOperators, FlexibleInstances, ScopedTypeVariables, TypeSynonymInstances
+    ghc-options:        -fwarn-incomplete-patterns -fwarn-monomorphism-restriction -fwarn-unused-imports
+    default-language:   Haskell2010
+    default-extensions: TypeOperators, FlexibleInstances, ScopedTypeVariables, TypeSynonymInstances
 
 test-suite test
     type: detailed-0.9
