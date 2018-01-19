@@ -167,8 +167,66 @@ tests = return $ fmap Test
                        pA = 1 <$$ char 'a' <** char 'b' <||> satisfy 0
                        pY = "Y" <::=> satisfy 0 <||> pX
                     in testParser "hidden left-recursion + infinite derivations" pX [("", [0]), ("ab", [1]), ("ababab", [3])]
+
+               --- Testing ambiguity reduction combinators
+                ++ let pX = (++) <$$> pA <**>>> pB
+                       pA = "a" <$$ char 'a' <||> "aa" <$$ char 'a' <** char 'a'
+                       pB = "b" <$$ char 'a' <||> "bb" <$$ char 'a' <** char 'a'
+                    in testParser "A<A" pX   [("aaa", ["aab"]),("aa", ["ab"])]
+
+                ++ let pX = (++) <$$> pA <<<**> pB
+                       pA = "a" <$$ char 'a' <||> "aa" <$$ char 'a' <** char 'a'
+                       pB = "b" <$$ char 'a' <||> "bb" <$$ char 'a' <** char 'a'
+                    in testParser "A>A" pX   [("aaa", ["abb"]),("aa", ["ab"])]
+
+                ++ let pX = "X" <:=> multiple pY
+                       pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
+                    in testParser "multiple" pX [("", [[]]), ("1", [[1]]), ("11", [[1,1],[2]]), ("111", [[1,1,1], [2,1], [1,2]])]
+
+                ++ let pX = "X" <:=> some pY
+                       pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
+                    in testParser "some" pX [("", [[]]), ("1", [[1]]), ("11", [[2]]), ("111", [[2,1]])]
+
+                ++ let pX = "X" <:=> many pY
+                       pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
+                    in testParser "many" pX [("", [[]]), ("1", [[1]]), ("11", [[1,1]]), ("111", [[1,1,1]])]
+
+                ++ let pX = "X" <:=> "1" <$$ char '1' <||> multipleSepBy (char '1') (char ';')
+                    in testParser "multipleSepBy" pX [("", [""]), ("1", ["1", "1"]), ("1;1", ["11"])]
+
+                -- pX matches epsilon, therefore leading to infinitely many derivations
+                ++ let pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
+                    in testParser "multipleSepBy2" pX [("", [0]), ("1", [1,1]), ("1;1", [2]), (";1", [1]),  (";1;1", [2])]
+
+                ++ let pX = "X" <:=> length <$$> multiple (char '1')
+                    in testParser "multiple1" pX [("", [0]), ("11", [2]), (replicate 10 '1', [10])]
+
+                ++ let pX = "X" <:=> length <$$> multiple (char '1') <** char 'z'
+                    in testParser "multiple2" pX [("", []), ("11z", [2]), (replicate 10 '1' ++ "z", [10])]
+
+                ++ let pX   = "X" <:=> length <$$> multiple pEps <** char 'z'
+                       pEps = satisfy () <||> () <$$ char '1'
+                    in testParser "multiple & epsilon" pX [("", []), ("z", [0])]
+
+               --- why not ("", [[0]]) ??
+                ++ let pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
+                    in testParser "multipleSepBy and multiple" (multiple pX) [("", [[]]), ("1", [[1],[1]]), ("1;1", [[1,0,1],[1,1],[2]]) ,(";1;1", [[0,1,0,1],[0,1,1], [0,2], [1,0,1], [1,1], [2]])]
                  )
+
+--- {-
+---     -- a combinator `fewest` (variant of multiple) should behave as follows
+---     ++ let pX = "X" <:=> fewest pY
+---          where pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
+---         in testParser "some" pX
+---       [("", [[]]), ("1", [[1]]), ("11", [[2]]), ("111", [[2,1], [1,2]])]
 ---
+---     ++ let pX :: BNF Char Int
+---         pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
+---         in testParser "manySepBy and multiple" (many pX)
+---       -- why not ("", [[0]]) ??
+---       [("", [[]]), ("1", [[1],[1]]), ("1;1", [[1,0,1]])]-}
+--- -}
+
 ---     putStrLn "Tests that use memoisation"
 ---
 ---     let tab = newMemoTable
@@ -199,73 +257,3 @@ tests = return $ fmap Test
 ---         pY = memo tab ("Y" <::=> satisfy 0 <||> pX)
 ---     test (Just tab) "hidden left-recursion + infinite derivations" pX
 ---         [("", [0]), ("ab", [1]), ("ababab", [3])]
----
----     putStrLn "Testing ambiguity reduction combinators"
----     let pX = (++) <$$> pA <**>>> pB
----         pA = "a" <$$ char 'a' <||> "aa" <$$ char 'a' <** char 'a'
----         pB = "b" <$$ char 'a' <||> "bb" <$$ char 'a' <** char 'a'
----     test Nothing "A<A" pX   [("aaa", ["aab"]),("aa", ["ab"])]
----
----     let pX = (++) <$$> pA <<<**> pB
----         pA = "a" <$$ char 'a' <||> "aa" <$$ char 'a' <** char 'a'
----         pB = "b" <$$ char 'a' <||> "bb" <$$ char 'a' <** char 'a'
----     test Nothing "A>A" pX   [("aaa", ["abb"]),("aa", ["ab"])]
----
----     let pX = "X" <:=> multiple pY
----          where pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
----     test Nothing "multiple" pX
----       [("", [[]]), ("1", [[1]]), ("11", [[1,1],[2]]), ("111", [[1,1,1], [2,1], [1,2]])]
----
----     let pX = "X" <:=> some pY
----          where pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
----     test Nothing "some" pX
----       [("", [[]]), ("1", [[1]]), ("11", [[2]]), ("111", [[2,1]])]
----
---- {-
----     -- a combinatar `fewest` (variant of multiple) should behave as follows
----     let pX = "X" <:=> fewest pY
----          where pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
----     test Nothing "some" pX
----       [("", [[]]), ("1", [[1]]), ("11", [[2]]), ("111", [[2,1], [1,2]])]
---- -}
----
----     let pX = "X" <:=> many pY
----          where pY = 1 <$$ char '1' <||> 2 <$$ char '1' <** char '1'
----     test Nothing "many" pX
----       [("", [[]]), ("1", [[1]]), ("11", [[1,1]]), ("111", [[1,1,1]])]
----
----     let pX = "X" <:=> "1" <$$ char '1' <||> multipleSepBy (char '1') (char ';')
----     test Nothing "multipleSepBy" pX
----       [("", [""]), ("1", ["1", "1"]), ("1;1", ["11"])]
----
----     -- pX matches epsilon, therefore leading to infinitely many derivations
----     let pX :: BNF Char Int
----         pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
----     test Nothing "multipleSepBy2" pX
----       [("", [0]), ("1", [1,1]), ("1;1", [2]), (";1", [1]),  (";1;1", [2])]
----
----     let pX = "X" <:=> length <$$> multiple (char '1')
----     test Nothing "multiple1" pX
----       [("", [0]), ("11", [2]), (replicate 10 '1', [10])]
----
----     let pX = "X" <:=> length <$$> multiple (char '1') <** char 'z'
----     test Nothing "multiple2" pX
----       [("", []), ("11z", [2]), (replicate 10 '1' ++ "z", [10])]
----
----     let pX = "X" <:=> length <$$> multiple pEps <** char 'z'
----           where pEps = satisfy () <||> () <$$ char '1'
----     test Nothing "multiple & epsilon" pX
----       [("", []), ("z", [0])]
----
----     let pX :: BNF Char Int
----         pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
----     test Nothing "multipleSepBy and multiple" (multiple pX)
----       -- why not ("", [[0]]) ??
----       [("", [[]]), ("1", [[1],[1]]), ("1;1", [[1,0,1],[1,1],[2]])
----       ,(";1;1", [[0,1,0,1],[0,1,1], [0,2], [1,0,1], [1,1], [2]])]
---- {-
----     let pX :: BNF Char Int
----         pX = "X" <::=> 1 <$$ char '1' <||> sum <$$> multipleSepBy pX (char ';')
----     test Nothing "manySepBy and multiple" (many pX)
----       -- why not ("", [[0]]) ??
----       [("", [[]]), ("1", [[1],[1]]), ("1;1", [[1,0,1]])]-}
